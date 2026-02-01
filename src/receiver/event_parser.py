@@ -2,12 +2,31 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import orjson
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, model_validator
 
 logger = logging.getLogger(__name__)
+
+
+def convert_timestamp(v: Any) -> Optional[float]:
+    """Convert timestamp to float, handling ISO 8601 strings."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            # Try parsing ISO 8601 format
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except ValueError:
+            try:
+                return float(v)
+            except ValueError:
+                return None
+    return None
 
 
 class SentryException(BaseModel):
@@ -44,31 +63,20 @@ class SentryRequest(BaseModel):
 class SentryBreadcrumb(BaseModel):
     """Sentry breadcrumb for event trail."""
 
-    timestamp: Optional[Union[float, str]] = None
+    timestamp: Optional[float] = None
     type: Optional[str] = None
     category: Optional[str] = None
     message: Optional[str] = None
     level: Optional[str] = None
     data: Optional[dict] = None
 
-    @field_validator("timestamp", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
-        """Convert timestamp to float if it's an ISO 8601 string."""
-        if v is None:
-            return None
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, str):
-            try:
-                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                return dt.timestamp()
-            except ValueError:
-                try:
-                    return float(v)
-                except ValueError:
-                    return None
-        return v
+    def preprocess_data(cls, data: Any) -> Any:
+        """Preprocess data before validation."""
+        if isinstance(data, dict) and "timestamp" in data:
+            data["timestamp"] = convert_timestamp(data["timestamp"])
+        return data
 
 
 class SentryEvent(BaseModel):
@@ -78,9 +86,11 @@ class SentryEvent(BaseModel):
     This represents the full event payload sent by Sentry SDKs.
     """
 
+    model_config = {"extra": "allow"}  # Allow additional fields from SDK
+
     # Identifiers
     event_id: Optional[str] = None
-    timestamp: Optional[Union[float, str]] = None
+    timestamp: Optional[float] = None
     platform: Optional[str] = None
     level: str = "error"
     logger: Optional[str] = None
@@ -114,29 +124,13 @@ class SentryEvent(BaseModel):
     # Modules/packages
     modules: Optional[Dict[str, str]] = None
 
-    @field_validator("timestamp", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def parse_timestamp(cls, v):
-        """Convert timestamp to float if it's an ISO 8601 string."""
-        if v is None:
-            return None
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, str):
-            try:
-                # Try parsing ISO 8601 format
-                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                return dt.timestamp()
-            except ValueError:
-                # Try parsing as float string
-                try:
-                    return float(v)
-                except ValueError:
-                    return None
-        return v
-
-    class Config:
-        extra = "allow"  # Allow additional fields from SDK
+    def preprocess_data(cls, data: Any) -> Any:
+        """Preprocess data before validation, converting timestamp."""
+        if isinstance(data, dict) and "timestamp" in data:
+            data["timestamp"] = convert_timestamp(data["timestamp"])
+        return data
 
 
 class EventParser:
@@ -157,6 +151,10 @@ class EventParser:
 
         try:
             data = orjson.loads(payload)
+
+            # Pre-process timestamp before Pydantic validation
+            if "timestamp" in data:
+                data["timestamp"] = convert_timestamp(data["timestamp"])
 
             # Handle user as dict or model
             if "user" in data and isinstance(data["user"], dict):
