@@ -1,0 +1,32 @@
+# Sentrel Production Dependencies
+# Pin exact versions for reproducible builds
+
+# Web Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pydantic-settings==2.2.1
+
+# HTTP Client
+httpx==0.26.0
+
+# OpenSearch
+opensearch-py==2.4.2
+
+# Task Queue
+celery==5.3.6
+redis==5.0.1
+
+# Data Processing
+python-dateutil==2.8.2
+orjson==3.9.14
+
+# Enrichment (optional)
+geoip2==4.8.0
+user-agents==2.2.0
+
+# Logging
+structlog==24.1.0
+
+# Metrics
+prometheus-client==0.19.0

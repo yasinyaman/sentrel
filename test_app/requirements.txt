@@ -1,0 +1,8 @@
+# Sentrel Test Uygulaması - Bağımlılıklar
+
+# Sentry SDK
+sentry-sdk>=1.30.0
+
+# Web UI için (opsiyonel)
+fastapi>=0.100.0
+uvicorn>=0.23.0

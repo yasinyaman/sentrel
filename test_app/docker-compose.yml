@@ -1,0 +1,58 @@
+# Sentrel Test Uygulaması - Docker Compose
+# Bu dosyayı test_app klasöründen çalıştırın
+
+services:
+  # CLI Hata Üreteci
+  error-generator:
+    build: .
+    environment:
+      - SENTRY_DSN=${SENTRY_DSN:-http://test@sentrel:8000/1}
+    networks:
+      - sentrel_default
+    command: ["--dsn", "${SENTRY_DSN:-http://test@sentrel:8000/1}", "--random", "10"]
+    profiles:
+      - cli
+
+  # Web Tabanlı Hata Üreteci
+  web-generator:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SENTRY_DSN=${SENTRY_DSN:-http://test@sentrel:8000/1}
+    networks:
+      - sentrel_default
+    entrypoint: ["python", "web_error_generator.py"]
+    command: ["--dsn", "${SENTRY_DSN:-http://test@sentrel:8000/1}", "--port", "8080"]
+    profiles:
+      - web
+
+  # Sürekli Hata Gönderen Test (Stress Test)
+  stress-test:
+    build: .
+    environment:
+      - SENTRY_DSN=${SENTRY_DSN:-http://test@sentrel:8000/1}
+    networks:
+      - sentrel_default
+    command: ["--dsn", "${SENTRY_DSN:-http://test@sentrel:8000/1}", "--random", "100", "--delay", "0.1"]
+    profiles:
+      - stress
+
+networks:
+  sentrel_default:
+    external: true
+
+# Kullanım:
+# 
+# 1. Önce ana Sentrel'i başlatın:
+#    cd ../docker && docker-compose up -d
+#
+# 2. CLI modunda test (10 rastgele hata):
+#    SENTRY_DSN="http://YOUR_KEY@sentrel:8000/1" docker-compose --profile cli up
+#
+# 3. Web UI modunda test:
+#    SENTRY_DSN="http://YOUR_KEY@sentrel:8000/1" docker-compose --profile web up
+#    Ardından: http://localhost:8080
+#
+# 4. Stress test (100 hata):
+#    SENTRY_DSN="http://YOUR_KEY@sentrel:8000/1" docker-compose --profile stress up

@@ -1,0 +1,277 @@
+Metadata-Version: 2.4
+Name: sentrel
+Version: 1.0.0
+Summary: Sentry SDK events to OpenSearch - Self-hosted error tracking
+Author: Sentry Bridge Team
+License: MIT
+Keywords: sentry,opensearch,error-tracking,monitoring
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.109.0
+Requires-Dist: uvicorn[standard]>=0.27.0
+Requires-Dist: pydantic>=2.5.0
+Requires-Dist: pydantic-settings>=2.1.0
+Requires-Dist: httpx>=0.26.0
+Requires-Dist: opensearch-py>=2.4.0
+Requires-Dist: celery>=5.3.0
+Requires-Dist: redis>=5.0.0
+Requires-Dist: python-dateutil>=2.8.2
+Requires-Dist: orjson>=3.9.0
+Requires-Dist: geoip2>=4.7.0
+Requires-Dist: user-agents>=2.2.0
+Requires-Dist: structlog>=24.1.0
+Requires-Dist: prometheus-client>=0.19.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
+Requires-Dist: black>=24.1.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.8.0; extra == "dev"
+
+# Sentrel
+
+Self-hosted Sentry alternatifi - Sentry SDK'larından gelen hata verilerini OpenSearch'e kaydeden ve görselleştiren uygulama.
+
+## Özellikler
+
+- Sentry SDK'lar ile tam uyumlu (Python, JavaScript, Node.js, vb.)
+- Sentry Envelope ve legacy JSON formatlarını destekler
+- OpenSearch'e gerçek zamanlı event indexleme
+- Celery ile async işleme desteği
+- GeoIP ve User-Agent enrichment
+- OpenSearch Dashboards ile görselleştirme
+- Docker ile kolay deployment
+
+## Hızlı Başlangıç
+
+### Docker Compose ile (Önerilen)
+
+```bash
+# Tüm servisleri başlat
+cd docker
+docker-compose up -d
+
+# Logları izle
+docker-compose logs -f app
+```
+
+Servisler:
+- **Sentrel App**: http://localhost:8000
+- **OpenSearch**: http://localhost:9200
+- **OpenSearch Dashboards**: http://localhost:5601
+
+### Manuel Kurulum
+
+```bash
+# Virtual environment oluştur
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Bağımlılıkları yükle
+pip install -r requirements.txt
+
+# Environment variables ayarla
+cp .env.example .env
+# .env dosyasını düzenle
+
+# OpenSearch index'lerini hazırla
+python scripts/setup_index.py
+
+# Uygulamayı başlat
+python -m src.main
+```
+
+## DSN Oluşturma
+
+Sentry SDK'ları Sentrel'e yönlendirmek için DSN oluşturun:
+
+```bash
+python scripts/generate_dsn.py --host localhost:8000 --project 1
+
+# Örnek çıktı:
+# DSN: http://abc123def456@localhost:8000/1
+```
+
+## SDK Konfigürasyonu
+
+### Python
+
+```python
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="http://YOUR_KEY@localhost:8000/1",
+    environment="production",
+    release="myapp@1.0.0",
+)
+
+# Test
+try:
+    raise ValueError("Test error")
+except Exception:
+    sentry_sdk.capture_exception()
+```
+
+### JavaScript
+
+```javascript
+import * as Sentry from "@sentry/browser";
+
+Sentry.init({
+    dsn: "http://YOUR_KEY@localhost:8000/1",
+    environment: "production",
+});
+```
+
+### Node.js
+
+```javascript
+const Sentry = require("@sentry/node");
+
+Sentry.init({
+    dsn: "http://YOUR_KEY@localhost:8000/1",
+    environment: "production",
+});
+```
+
+## API Endpoints
+
+| Endpoint | Method | Açıklama |
+|----------|--------|----------|
+| `/api/{project_id}/envelope/` | POST | Ana event endpoint (Envelope format) |
+| `/api/{project_id}/store/` | POST | Legacy event endpoint (JSON) |
+| `/api/{project_id}/minidump/` | POST | Native crash dumps |
+| `/api/{project_id}/security/` | POST | CSP/Security reports |
+| `/api/{project_id}/` | GET | SDK connection check |
+| `/health` | GET | Health check |
+| `/ready` | GET | Readiness check |
+| `/metrics` | GET | Prometheus metrics |
+| `/stats` | GET | Index statistics |
+
+## Konfigürasyon
+
+Tüm konfigürasyon environment variables ile yapılır:
+
+| Variable | Default | Açıklama |
+|----------|---------|----------|
+| `APP_NAME` | `sentrel` | Uygulama adı |
+| `OPENSEARCH_HOSTS` | `http://localhost:9200` | OpenSearch host listesi |
+| `OPENSEARCH_USERNAME` | - | OpenSearch kullanıcı adı |
+| `OPENSEARCH_PASSWORD` | - | OpenSearch şifresi |
+| `OPENSEARCH_INDEX_PREFIX` | `sentry-events` | Index prefix |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `USE_CELERY` | `true` | Async işleme aktif |
+| `ALLOWED_PUBLIC_KEYS` | - | İzin verilen DSN key'leri |
+| `PROJECT_IDS` | - | İzin verilen proje ID'leri |
+| `ENABLE_GEOIP` | `false` | GeoIP enrichment |
+| `GEOIP_DATABASE_PATH` | - | MaxMind GeoIP2 DB yolu |
+
+## OpenSearch Index Yapısı
+
+Events şu formatta indexlenir:
+
+```json
+{
+  "@timestamp": "2024-01-15T10:00:00Z",
+  "event_id": "abc123",
+  "project_id": 1,
+  "level": "error",
+  "platform": "python",
+  "environment": "production",
+  "message": "ValueError: invalid value",
+  "exception_type": "ValueError",
+  "exception_value": "invalid value",
+  "stacktrace": "...",
+  "user": {
+    "id": "user123",
+    "email_hash": "abc123...",
+    "ip": "192.168.1.1"
+  },
+  "browser": {"name": "Chrome", "version": "120"},
+  "os": {"name": "Windows", "version": "10"},
+  "geo": {
+    "country_code": "TR",
+    "city": "Istanbul",
+    "location": {"lat": 41.0, "lon": 29.0}
+  },
+  "tags": {"server": "web-1"},
+  "sdk": {"name": "sentry.python", "version": "1.0.0"}
+}
+```
+
+## Dashboards
+
+Hazır dashboard'lar `dashboards/` klasöründe:
+
+- **Error Overview** - Genel hata görünümü
+- **Project Metrics** - Proje ve release metrikleri
+- **User Impact** - Kullanıcı etkisi ve coğrafi analiz
+
+Import etmek için: OpenSearch Dashboards > Stack Management > Saved Objects > Import
+
+## Celery Workers
+
+Async işleme için Celery worker'ları başlatın:
+
+```bash
+# Event işleme worker
+celery -A src.tasks.celery_tasks worker -l info -Q events,batch -c 4
+
+# Periodic task scheduler
+celery -A src.tasks.celery_tasks beat -l info
+```
+
+## Testler
+
+```bash
+# Tüm testleri çalıştır
+pytest
+
+# Coverage ile
+pytest --cov=src --cov-report=html
+
+# Belirli test dosyası
+pytest tests/test_envelope_parser.py -v
+```
+
+## Proje Yapısı
+
+```
+sentrel/
+├── src/
+│   ├── main.py              # FastAPI uygulaması
+│   ├── config.py            # Konfigürasyon
+│   ├── receiver/            # Sentry SDK endpoint'leri
+│   ├── opensearch/          # OpenSearch client & indexer
+│   ├── etl/                 # Transform & enrich pipeline
+│   └── tasks/               # Celery async tasks
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── dashboards/              # OpenSearch Dashboard JSON'ları
+├── tests/                   # Unit testler
+├── scripts/                 # Utility scriptler
+├── requirements.txt
+└── pyproject.toml
+```
+
+## Lisans
+
+MIT License
+
+## Katkıda Bulunma
+
+1. Fork yapın
+2. Feature branch oluşturun (`git checkout -b feature/amazing`)
+3. Commit yapın (`git commit -m 'Add amazing feature'`)
+4. Push yapın (`git push origin feature/amazing`)
+5. Pull Request açın
